@@ -24,8 +24,8 @@ export default function ServerSidebar({
       {/* Header */}
       <div className="p-4 border-b border-sidebar-border">
         <h2 className="font-semibold text-sidebar-foreground flex items-center gap-2">
-          <ServerIcon className="w-5 h-5" />
-          Servers
+         
+          Server List 
         </h2>
       </div>
 

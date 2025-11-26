@@ -97,7 +97,7 @@ export default function ConfigurationChecklist({ checkStatuses, onValidate, onSe
               <div className="flex-1">
                 <h3 className="font-medium">{item.label}</h3>
                 <p className="text-sm text-muted-foreground">{item.description}</p>
-                <p className="text-xs text-muted-foreground mt-1">{item.path}</p>
+                {/* <p className="text-xs text-muted-foreground mt-1">{item.path}</p> */}
               </div>
             </div>
 

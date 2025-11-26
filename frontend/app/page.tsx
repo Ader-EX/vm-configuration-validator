@@ -126,7 +126,7 @@ export default function Home() {
             {/* Header */}
             <div>
               <h1 className="text-3xl font-bold text-foreground">VM Configuration Validator</h1>
-              <p className="text-muted-foreground mt-1">Validate and configure Oracle VM prerequisites</p>
+              {/* <p className="text-muted-foreground mt-1">Validate and configure Oracle VM prerequisites</p> */}
             </div>
 
             {showAddServer ? (
@@ -158,7 +158,7 @@ export default function Home() {
 
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                   {/* Checklist */}
-                  <div className="lg:col-span-2">
+                  <div className="lg:col-span-3">
                     <ConfigurationChecklist
                       checkStatuses={checkStatuses}
                       onValidate={handleValidateConfig}
@@ -167,9 +167,9 @@ export default function Home() {
                   </div>
 
                   {/* Execution Log */}
-                  <div className="lg:col-span-1">
+                  {/* <div className="lg:col-span-1">
                     <ExecutionLog logs={logs} />
-                  </div>
+                  </div> */}
                 </div>
               </div>
             ) : (

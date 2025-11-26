@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import type { Server } from "@/app/page"
+import { Textarea } from "./ui/textarea"
 
 interface ServerConnectionFormProps {
   onSubmit: (server: Server) => void
@@ -30,20 +31,7 @@ export default function ServerConnectionForm({ onSubmit, onCancel }: ServerConne
     }))
   }
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (file) {
-      const reader = new FileReader()
-      reader.onload = (e) => {
-        setFormData((prev) => ({
-          ...prev,
-          sshKey: e.target?.result as string,
-        }))
-      }
-      reader.readAsText(file)
-    }
-  }
-
+ 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     if (!formData.name || !formData.ipAddress || !formData.sshKey) {
@@ -119,15 +107,17 @@ export default function ServerConnectionForm({ onSubmit, onCancel }: ServerConne
         <div>
           <label className="block text-sm font-medium mb-2">SSH Key (Private Key) *</label>
           <div className="space-y-2">
-            <Input
-              type="file"
-              onChange={handleFileUpload}
-              accept=".pem,.key"
-              className="w-full bg-input border border-border text-foreground"
-            />
-            <p className="text-xs text-muted-foreground">Upload your private SSH key (.pem or .key file)</p>
-            {formData.sshKey && <p className="text-xs text-green-600 dark:text-green-400">✓ Key loaded</p>}
-          </div>
+            <Textarea
+            name="sshKey"
+            placeholder="-----BEGIN OPENSSH PRIVATE KEY-----"
+            value={formData.sshKey}
+            onChange={handleChange}
+            className="w-full bg-input border border-border text-foreground h-24"
+          />
+
+           
+            <p className="text-xs text-muted-foreground">Add your private SSH key</p>
+           </div>
         </div>
 
         <div className="flex justify-end gap-3 pt-4">
