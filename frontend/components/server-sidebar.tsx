@@ -8,7 +8,7 @@ interface ServerSidebarProps {
   servers: Server[]
   selectedServer: Server | null
   onSelectServer: (server: Server) => void
-  onDeleteServer: (serverId: string) => void
+  onDeleteServer: (serverId: number) => void
   onShowAddServer: () => void
 }
 
@@ -47,7 +47,7 @@ export default function ServerSidebar({
               <div className="flex items-start justify-between gap-2">
                 <div className="flex-1 min-w-0">
                   <p className="font-medium text-sm truncate">{server.name}</p>
-                  <p className="text-xs opacity-75 truncate">{server.ipAddress}</p>
+                  <p className="text-xs opacity-75 truncate">{server.address}</p>
                 </div>
                 <button
                   onClick={(e) => {

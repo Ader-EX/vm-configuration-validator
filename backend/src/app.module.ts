@@ -1,4 +1,4 @@
-import { ConfigurableModuleBuilder, Module } from '@nestjs/common';
+import { Module } from '@nestjs/common';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { CatsController } from './cats.controller';
@@ -6,10 +6,11 @@ import { SshService } from './service/ssh.service';
 import { SshController } from './ssh/ssh.controller';
 import { ConfigModule } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { User } from './entity/user.entity';
 import { SshList } from './entity/ssh-list.entity';
 import { SshListService } from './service/ssh-list.service';
 import { MulterModule } from '@nestjs/platform-express';
+import { VmPrereqService } from './service/prereq-service';
+import { VmPrereqController } from './controller/prereq-controller';
 
 @Module({
   imports: [
@@ -22,12 +23,17 @@ import { MulterModule } from '@nestjs/platform-express';
     TypeOrmModule.forRoot({
       type: 'sqlite',
       database: 'database.sqlite',
-      entities: [User, SshList],
+      entities: [SshList],
       synchronize: true,
     }),
     TypeOrmModule.forFeature([SshList]),
   ],
-  controllers: [AppController, CatsController, SshController],
-  providers: [AppService, SshService, SshListService],
+  controllers: [
+    AppController,
+    CatsController,
+    SshController,
+    VmPrereqController,
+  ],
+  providers: [AppService, SshService, SshListService, VmPrereqService],
 })
 export class AppModule {}

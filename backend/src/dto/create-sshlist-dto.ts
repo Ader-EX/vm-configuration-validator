@@ -3,6 +3,7 @@ export class CreateSshListDto {
   address: string;
   port: string;
   username: string;
+  passphrase?: string = '';
   userGroup?: number = 0;
   ulimit?: number = 0;
   securityLimits?: number = 0;
@@ -17,4 +18,3 @@ export class CreateSshListDto {
 //   "port": "22",
 //   "username": "ubuntu"
 // }
-``;

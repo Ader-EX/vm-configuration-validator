@@ -21,6 +21,9 @@ export class SshList {
   @Column()
   ssh_key: string;
 
+  @Column({ nullable: true })
+  passphrase: string;
+
   @Column({ default: 0 })
   userGroup: number;
 

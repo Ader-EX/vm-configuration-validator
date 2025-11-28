@@ -7,7 +7,6 @@ import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import type { Server } from "@/app/page"
-import { Textarea } from "./ui/textarea"
 
 interface ServerConnectionFormProps {
   onSubmit: (server: Server) => void
@@ -15,13 +14,18 @@ interface ServerConnectionFormProps {
 }
 
 export default function ServerConnectionForm({ onSubmit, onCancel }: ServerConnectionFormProps) {
+
+  
   const [formData, setFormData] = useState({
     name: "",
     ipAddress: "",
     sshPort: 22,
     username: "root",
-    sshKey: "",
+    passphrase: ""
   })
+
+  const [file, setFile] = useState<File>();
+
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target
@@ -31,21 +35,32 @@ export default function ServerConnectionForm({ onSubmit, onCancel }: ServerConne
     }))
   }
 
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const file = e.target.files?.[0] ;
+  setFile(file);
+  
+  // setFormData((prev) => ({
+  //   ...prev,
+  //   file: file,
+  // }));
+};
+
  
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
-    if (!formData.name || !formData.ipAddress || !formData.sshKey) {
+    if (!formData.name || !formData.ipAddress || !file) {
       alert("Please fill in all required fields")
       return
     }
 
-    const newServer: Server = {
-      id: Date.now().toString(),
+    const newServer: any = {
       name: formData.name,
-      ipAddress: formData.ipAddress,
-      sshPort: formData.sshPort,
+      address: formData.ipAddress,
+      port: formData.sshPort,
       username: formData.username,
-      sshKey: formData.sshKey,
+      file: file,
+      passphrase: formData.passphrase || ""
+      
     }
 
     onSubmit(newServer)
@@ -91,6 +106,8 @@ export default function ServerConnectionForm({ onSubmit, onCancel }: ServerConne
               className="w-full bg-input border border-border text-foreground"
             />
           </div>
+
+          
         </div>
 
         <div>
@@ -107,18 +124,37 @@ export default function ServerConnectionForm({ onSubmit, onCancel }: ServerConne
         <div>
           <label className="block text-sm font-medium mb-2">SSH Key (Private Key) *</label>
           <div className="space-y-2">
-            <Textarea
+         <Input
+  type="file"
+  onChange={handleFileUpload}
+  className="w-full bg-input border border-border text-foreground"
+/>
+
+
+            {/* <Textarea
             name="sshKey"
             placeholder="-----BEGIN OPENSSH PRIVATE KEY-----"
             value={formData.sshKey}
             onChange={handleChange}
             className="w-full bg-input border border-border text-foreground h-24"
-          />
+          /> */}
 
            
             <p className="text-xs text-muted-foreground">Add your private SSH key</p>
            </div>
         </div>
+
+        <div>
+            <label className="block text-sm font-medium mb-1">Passphrase</label>
+            <Input
+              type="text"
+              name="passphrase"
+              placeholder="EMPTY IF NOT USED"
+              value={formData.passphrase}
+              onChange={handleChange}
+              className="w-full bg-input border border-border text-foreground"
+            />
+          </div>
 
         <div className="flex justify-end gap-3 pt-4">
           <Button type="button" onClick={onCancel} className="bg-muted text-foreground hover:bg-muted/80">

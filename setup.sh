@@ -19,8 +19,8 @@ if [ -d "./backend" ]; then
   echo "Setting up the backend..."
   cd ./backend || exit
   npm install
-  echo "Starting backend (npm run dev)..."
-  npm run dev &
+  echo "Starting backend (npm run start:dev)..."
+  npm run start:dev &
   BACKEND_PID=$!
   cd ..
 else

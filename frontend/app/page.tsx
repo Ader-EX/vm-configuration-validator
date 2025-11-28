@@ -4,17 +4,28 @@ import { useState, useEffect } from "react"
 import ServerSidebar from "@/components/server-sidebar"
 import ServerConnectionForm from "@/components/server-connection-form"
 import ConfigurationChecklist from "@/components/configuration-checklist"
-import ExecutionLog from "@/components/execution-log"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
+import { sshService } from "@/services/ssh-services"
+import toast from 'react-hot-toast';
+import { AxiosError } from "axios"
 
 export type Server = {
-  id: string
+  id: number
   name: string
-  ipAddress: string
-  sshPort: number
+  address: string
+  port: number
   username: string
-  sshKey: string
+  ssh_key : File
+  passphrase: string
+  userGroup: number
+  ulimit: number
+  securityLimits: number
+  sysctl: number
+  jvm: number
+  threadPool: number
+  garbageCollector: number
+
 }
 
 export type LogEntry = {
@@ -39,15 +50,18 @@ export default function Home() {
     garbageCollector: "not-configured",
   })
 
-  // Load servers from localStorage
-  useEffect(() => {
-    const stored = localStorage.getItem("vm-servers")
-    if (stored) {
-      setServers(JSON.parse(stored))
-    }
-  }, [])
+useEffect(() => {
+  const loadServers = async () => {
+    const serverData = await sshService.getAllData();
 
-  // Save servers to localStorage
+    if (serverData) {
+      setServers(serverData);  
+    }
+  };
+
+  loadServers();
+}, []);
+
   useEffect(() => {
     localStorage.setItem("vm-servers", JSON.stringify(servers))
   }, [servers])
@@ -59,7 +73,7 @@ export default function Home() {
     addLog("info", `Server "${server.name}" added successfully`)
   }
 
-  const handleDeleteServer = (serverId: string) => {
+  const handleDeleteServer = (serverId: number) => {
     setServers(servers.filter((s) => s.id !== serverId))
     if (selectedServer?.id === serverId) {
       setSelectedServer(null)
@@ -81,10 +95,8 @@ export default function Home() {
     setCheckStatuses((prev) => ({ ...prev, [itemKey]: "checking" }))
     addLog("checking", `Validating ${itemKey}...`)
 
-    // Simulate validation - in real app, this would call your backend API
-    // which connects via SSH to the server
     setTimeout(() => {
-      const isConfigured = Math.random() > 0.5 // Random for demo
+      const isConfigured = Math.random() > 0.5 
       setCheckStatuses((prev) => ({
         ...prev,
         [itemKey]: isConfigured ? "configured" : "not-configured",
@@ -99,9 +111,6 @@ export default function Home() {
   const handleSetupConfig = async (itemKey: string) => {
     addLog("checking", `Setting up ${itemKey}...`)
     setCheckStatuses((prev) => ({ ...prev, [itemKey]: "checking" }))
-
-    // Simulate setup - in real app, this would call your backend API
-    // which executes the setup script on the remote server
     setTimeout(() => {
       setCheckStatuses((prev) => ({ ...prev, [itemKey]: "configured" }))
       addLog("success", `${itemKey}: Setup completed successfully ✓`)
@@ -139,20 +148,30 @@ export default function Home() {
                     <div>
                       <h2 className="text-lg font-semibold">{selectedServer.name}</h2>
                       <p className="text-sm text-muted-foreground">
-                        {selectedServer.ipAddress}:{selectedServer.sshPort}
+                        {selectedServer.address}:{selectedServer.port}
                       </p>
                     </div>
-                    <Button
-                      onClick={() => {
-                        addLog("info", "Testing connection...")
-                        setTimeout(() => {
-                          addLog("success", "Connection successful ✓")
-                        }, 1000)
-                      }}
-                      className="bg-primary text-primary-foreground hover:bg-primary/90"
-                    >
-                      Test Connection
-                    </Button>
+                   <Button
+  onClick={async () => {
+    const t = toast.loading("Testing connection...");
+
+    try {
+      const result = await sshService.testConnection(Number(selectedServer.id));
+
+      toast.dismiss(t);
+      toast.success("Successfully connected!");
+    } catch (error) {
+      toast.dismiss(t);
+
+      const err = error as Error;
+      toast.error(err.message || "Something went wrong");
+    }
+  }}
+  className="bg-primary text-primary-foreground hover:bg-primary/90"
+>
+  Test Connection
+</Button>
+
                   </div>
                 </Card>
 

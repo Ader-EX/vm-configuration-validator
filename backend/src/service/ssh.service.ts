@@ -1,7 +1,6 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, HttpException, Injectable } from '@nestjs/common';
 import { Client } from 'ssh2';
 import { readFileSync } from 'fs';
-import { SshListService } from './ssh-list.service';
 import { InjectRepository } from '@nestjs/typeorm';
 import { SshList } from 'src/entity/ssh-list.entity';
 import { Repository } from 'typeorm';
@@ -15,12 +14,6 @@ export class SshService {
 
   playgroundSSHCommand(): Promise<string> {
     return new Promise((resolve, reject) => {
-      const pass = process.env.PASSWORD;
-      console.log(
-        'Password:',
-        pass ? `**** (length: ${pass.length})` : 'undefined ❌',
-      );
-
       const conn = new Client();
       conn
         .on('ready', () => {
@@ -43,17 +36,21 @@ export class SshService {
           port: 22,
           username: 'ubuntu',
           password: process.env.PASSWORD,
+          passphrase: '',
           privateKey: readFileSync('id_rsa'),
         });
     });
   }
 
   async runSSHCommand(sshList_id: any): Promise<string> {
-    console.log('ID -> ', sshList_id);
+    console.log('ID -> ', sshList_id.id);
     const sshConfig = await this.repo.findOne({ where: { id: sshList_id.id } });
 
     if (!sshConfig) {
-      throw new Error(`SSH config with id ${sshList_id} not found`);
+      throw new HttpException(
+        `SSH config with id ${sshList_id.id} not found`,
+        400,
+      );
     }
 
     console.log('\n===== SSH CONNECTION DEBUG =====');
@@ -61,47 +58,53 @@ export class SshService {
     console.log('Port:', sshConfig.port);
     console.log('Username:', sshConfig.username);
 
-    const key = sshConfig.ssh_key ? readFileSync(sshConfig.ssh_key) : undefined;
+    const key = sshConfig.ssh_key
+      ? readFileSync(sshConfig.ssh_key, 'utf8')
+      : undefined;
+
+    // Clean up the key
+    const cleanKey = key?.trim();
     console.log(key?.toString());
 
-    return new Promise((resolve, reject) => {
-      const conn = new Client();
+    try {
+      return await new Promise((resolve, reject) => {
+        const conn = new Client();
 
-      conn
-        .on('ready', () => {
-          console.log('Client :: ready');
-
-          conn.exec('uptime', (err, stream) => {
-            if (err) {
-              conn.end();
-              return reject(err);
-            }
-
-            let output = '';
-
-            stream
-              .on('data', (data) => {
-                output += data.toString();
-              })
-              .on('close', () => {
+        conn
+          .on('ready', () => {
+            conn.exec('uptime', (err, stream) => {
+              if (err) {
                 conn.end();
-                resolve(output);
-              })
-              .stderr.on('data', (data) => {
-                reject(data.toString());
-              });
+                return reject(err);
+              }
+
+              let output = '';
+
+              stream
+                .on('data', (data) => (output += data.toString()))
+                .on('close', () => {
+                  conn.end();
+                  resolve(output);
+                })
+                .stderr.on('data', (data) => reject(data.toString()));
+            });
+          })
+          .on('error', (err) => reject(err))
+          .connect({
+            host: sshConfig.address,
+            port: Number(sshConfig.port),
+            username: sshConfig.username,
+            passphrase: sshConfig.passphrase,
+            privateKey: cleanKey,
+            // debug: (info) => console.log('SSH Debug:', info),
+            algorithms: {
+              serverHostKey: ['ssh-rsa', 'rsa-sha2-512', 'rsa-sha2-256'],
+            },
           });
-        })
-        .on('error', (err) => {
-          console.error('SSH Connection Error:', err);
-          reject(err);
-        })
-        .connect({
-          host: sshConfig.address,
-          port: Number(sshConfig.port),
-          username: sshConfig.username,
-          password: process.env.PASSWORD,
-        });
-    });
+      });
+    } catch (err) {
+      console.error('SSH Error:', err);
+      throw new BadRequestException(`Connection failed: ${err.message}`);
+    }
   }
 }
