@@ -10,14 +10,18 @@ import {
   HttpStatus,
 } from '@nestjs/common';
 import { VmPrereqService } from 'src/service/prereq-service';
+import { SshListService } from 'src/service/ssh-list.service';
 
 @Controller('vm-prereq')
 export class VmPrereqController {
-  constructor(private readonly vmPrereqService: VmPrereqService) {}
+  constructor(
+    private readonly vmPrereqService: VmPrereqService,
+    private readonly repo: SshListService,
+  ) {}
 
   /**
    * GET /vm-prereq/validate/:serverId
-   * Query params: ?username=oracle&group=dba&configPath=/opt/app/config
+   * Query params: ?username=wmuser&group=wmuser&configPath=/opt/app/config
    */
   @Get('validate/:serverId')
   async validateAll(
@@ -48,77 +52,73 @@ export class VmPrereqController {
    * GET /vm-prereq/validate/:serverId/:checkType
    * checkType: userGroup, ulimit, securityLimits, sysctl, jvm, threadPool, garbageCollector
    */
-  @Get('validate/:serverId/:checkType')
-  async validateSpecific(
-    @Param('serverId') serverId: string,
-    @Param('checkType') checkType: string,
-    @Query('username') username?: string,
-    @Query('group') group?: string,
-    @Query('configPath') configPath?: string,
-  ) {
-    try {
-      const validCheckTypes = [
-        'userGroup',
-        'ulimit',
-        'securityLimits',
-        'sysctl',
-        'jvm',
-        'threadPool',
-        'garbageCollector',
-      ];
+  // @Get('validate/:serverId/:checkType')
+  // async validateSpecific(
+  //   @Param('serverId') serverId: string,
+  //   @Param('checkType') checkType: string,
+  //   @Query('username') username?: string,
+  //   @Query('group') group?: string,
+  //   @Query('configPath') configPath?: string,
+  // ) {
+  //   try {
+  //     const validCheckTypes = [
+  //       'userGroup',
+  //       'ulimit',
+  //       'securityLimits',
+  //       'sysctl',
+  //       'jvm',
+  //       'threadPool',
+  //       'garbageCollector',
+  //     ];
 
-      if (!validCheckTypes.includes(checkType)) {
-        throw new HttpException(
-          {
-            success: false,
-            message: `Invalid check type. Valid types: ${validCheckTypes.join(', ')}`,
-          },
-          HttpStatus.BAD_REQUEST,
-        );
-      }
+  //     if (!validCheckTypes.includes(checkType)) {
+  //       throw new HttpException(
+  //         {
+  //           success: false,
+  //           message: `Invalid check type. Valid types: ${validCheckTypes.join(', ')}`,
+  //         },
+  //         HttpStatus.BAD_REQUEST,
+  //       );
+  //     }
 
-      const result = await this.vmPrereqService.validateAll(+serverId, {
-        username,
-        group,
-        configPath,
-      });
+  //     const result = await this.vmPrereqService.validateAll(+serverId, {
+  //       username,
+  //       group,
+  //       configPath,
+  //     });
 
-      const specificValidation = result.validations.find(
-        (v) => v.key === checkType,
-      );
+  //     const specificValidation = result.validations.find(
+  //       (v) => v.key === checkType,
+  //     );
 
-      return {
-        serverId: result.serverId,
-        serverName: result.serverName,
-        timestamp: result.timestamp,
-        validation: specificValidation,
-      };
-    } catch (error) {
-      throw new HttpException(
-        {
-          success: false,
-          message: 'Validation failed',
-          error: error.message,
-        },
-        HttpStatus.INTERNAL_SERVER_ERROR,
-      );
-    }
-  }
-
-  /**
-   * POST /vm-prereq/setup/user-group/:serverId
-   * Body: { "username": "oracle", "group": "dba" }
-   */
-  @Post('setup/user-group/:serverId')
+  //     return {
+  //       serverId: result.serverId,
+  //       serverName: result.serverName,
+  //       timestamp: result.timestamp,
+  //       validation: specificValidation,
+  //     };
+  //   } catch (error) {
+  //     throw new HttpException(
+  //       {
+  //         success: false,
+  //         message: 'Validation failed',
+  //         error: error.message,
+  //       },
+  //       HttpStatus.INTERNAL_SERVER_ERROR,
+  //     );
+  //   }
+  // }
+  @Post('setup/:serverId/user-group')
   async setupUserGroup(
     @Param('serverId') serverId: string,
-    @Body() body: { username?: string; group?: string },
+    @Body() body: { username?: string; group?: string; password?: string },
   ) {
     try {
       const result = await this.vmPrereqService.setupUserGroup(
         +serverId,
         body.username,
         body.group,
+        body.password,
       );
       return {
         success: true,
@@ -130,6 +130,34 @@ export class VmPrereqController {
         {
           success: false,
           message: 'User and group setup failed',
+          error: error.message,
+        },
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+
+  @Get('validate/:serverId/user-group')
+  async validateUserGroup(
+    @Param('serverId') serverId: string,
+    @Query('username') username?: string,
+    @Query('group') group?: string,
+  ) {
+    try {
+      const result = await this.vmPrereqService.checkUserGroup(
+        +serverId,
+        username || 'wmuser',
+        group || 'wmuser',
+      );
+      return {
+        success: result.status === 'pass',
+        validation: result,
+      };
+    } catch (error) {
+      throw new HttpException(
+        {
+          success: false,
+          message: 'User and group validation failed',
           error: error.message,
         },
         HttpStatus.INTERNAL_SERVER_ERROR,
@@ -234,13 +262,11 @@ export class VmPrereqController {
     @Body() body: { username?: string; group?: string; autoFix?: boolean },
   ) {
     try {
-      // First validate
       const validation = await this.vmPrereqService.validateAll(
         +serverId,
         body,
       );
 
-      // If autoFix is enabled and there are failures, run setup
       if (body.autoFix && validation.overallStatus !== 'pass') {
         const failedChecks = validation.validations.filter(
           (v) => v.status === 'fail',
@@ -266,8 +292,8 @@ export class VmPrereqController {
                 body.username,
               );
             } else if (check.key === 'sysctl') {
-              setupResults.sysctl =
-                await this.vmPrereqService.setupSysctl(+serverId);
+              // setupResults.sysctl =
+              //   await this.vmPrereqService.setupSysctl(+serverId);
             }
           } catch (error) {
             setupResults[check.key] = { error: error.message };

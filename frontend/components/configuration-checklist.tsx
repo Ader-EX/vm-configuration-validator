@@ -1,11 +1,10 @@
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
-import { CheckCircle2, AlertCircle, Loader2, XCircle } from "lucide-react"
-
+import { CheckCircle2, AlertCircle, Loader2, XCircle, WifiOff } from "lucide-react"
 import toast from "react-hot-toast"
 import { sshService } from "@/services/ssh-services"
-
+import { DialogUserGroup } from "./setup-dialogs/user-group-dialog"
 
 interface ConfigurationChecklistProps {
   serverId: number
@@ -16,7 +15,7 @@ const configItems = [
   {
     key: "userGroup",
     label: "User & Group Setup",
-    description: "oracle:dba",
+    description: "username:group (password)",
     path: "User account and group configuration",
     canSetup: true,
   },
@@ -67,13 +66,40 @@ const configItems = [
 type CheckStatus = "idle" | "checking" | "pass" | "fail" | "error"
 
 export default function ConfigurationChecklist({ serverId, serverName }: ConfigurationChecklistProps) {
+  const [isConnected, setIsConnected] = useState(false)
+  const [isTestingConnection, setIsTestingConnection] = useState(false)
   const [checkStatuses, setCheckStatuses] = useState<Record<string, CheckStatus>>(
     Object.fromEntries(configItems.map((item) => [item.key, "idle"]))
   )
   const [validationDetails, setValidationDetails] = useState<Record<string, any>>({})
   const [isValidatingAll, setIsValidatingAll] = useState(false)
   const [isSettingUp, setIsSettingUp] = useState<Record<string, boolean>>({})
+  const [userDialogOpen, setUserDialogOpen] = useState(false)
+  const [dialogMode, setDialogMode] = useState<"validate" | "setup">("validate")
+  const [userConfig, setUserConfig] = useState({
+    username: "wmuser",
+    group: "wmuser",
+    password: ""
+  })
 
+  const testConnection = async () => {
+    setIsTestingConnection(true)
+    try {
+      const result = await sshService.testConnection(serverId)
+      if (result.success) {
+        setIsConnected(true)
+        toast.success("Connection successful! You can now validate configurations.")
+      } else {
+        setIsConnected(false)
+        toast.error(result.message || "Connection failed")
+      }
+    } catch (error: any) {
+      setIsConnected(false)
+      toast.error(error.message || "Connection test failed")
+    } finally {
+      setIsTestingConnection(false)
+    }
+  }
 
   const getStatusIcon = (status: CheckStatus) => {
     switch (status) {
@@ -106,6 +132,11 @@ export default function ConfigurationChecklist({ serverId, serverName }: Configu
   }
 
   const validateAll = async () => {
+    if (!isConnected) {
+      toast.error("Please test connection first")
+      return
+    }
+
     setIsValidatingAll(true)
     
     const checkingStatuses = Object.fromEntries(
@@ -114,9 +145,11 @@ export default function ConfigurationChecklist({ serverId, serverName }: Configu
     setCheckStatuses(checkingStatuses)
 
     try {
-      const result = await sshService.validateAllPrerequisites(serverId)
+      const result = await sshService.validateAllPrerequisites(serverId, {
+        username: userConfig.username,
+        group: userConfig.group
+      })
       
-      // Update statuses based on results
       const newStatuses: Record<string, CheckStatus> = {}
       const newDetails: Record<string, any> = {}
       
@@ -128,13 +161,10 @@ export default function ConfigurationChecklist({ serverId, serverName }: Configu
       setCheckStatuses(newStatuses)
       setValidationDetails(newDetails)
       
-      toast.success(
-     `Overall status: ${result.overallStatus.toUpperCase()}`,
-      )
+      toast.success(`Overall status: ${result.overallStatus.toUpperCase()}`)
     } catch (error: any) {
       toast.error(error.message)
       
-      // Reset to idle on error
       const idleStatuses = Object.fromEntries(
         configItems.map((item) => [item.key, "idle"])
       )
@@ -145,82 +175,155 @@ export default function ConfigurationChecklist({ serverId, serverName }: Configu
   }
 
   const validateSingle = async (itemKey: string) => {
+    if (!isConnected) {
+      toast.error("Please test connection first")
+      return
+    }
+
+    if (itemKey === "userGroup") {
+      setDialogMode("validate")
+      setUserDialogOpen(true)
+      return
+    }
+
     setCheckStatuses((prev) => ({ ...prev, [itemKey]: "checking" }))
 
     try {
-      const result = await sshService.validateAllPrerequisites(serverId)
+      const result = await sshService.validateAllPrerequisites(serverId, {
+        username: userConfig.username,
+        group: userConfig.group
+      })
       const validation = result.validations.find((v) => v.key === itemKey)
       
       if (validation) {
         setCheckStatuses((prev) => ({ ...prev, [itemKey]: validation.status }))
         setValidationDetails((prev) => ({ ...prev, [itemKey]: validation }))
-        
-        toast.success(
-          
- validation.message,
-          )
+        if (validation.status == "fail") {
+          toast.error(validation.status.toUpperCase() + " (" +  validation.details.output + ")" || validation.message)
+        } else {
+          toast.success(validation.details.output)
+        }
       }
     } catch (error: any) {
       setCheckStatuses((prev) => ({ ...prev, [itemKey]: "error" }))
-      toast.error(
-         error.message,
-        )
+      toast.error(error.message)
+    }
+  }
+
+  const handleDialogSubmit = async (data: { username: string; group: string; password: string }) => {
+    if (dialogMode === "validate") {
+      setIsSettingUp((prev) => ({ ...prev, userGroup: true }))
+      setCheckStatuses((prev) => ({ ...prev, userGroup: "checking" }))
+      
+      try {
+        console.log(data.username, data.group)
+        const result = await sshService.validateAllPrerequisites(serverId, {
+          username: data.username,
+          group: data.group
+        })
+        const validation = result.validations.find((v) => v.key === "userGroup")
+        
+        if (validation) {
+          setCheckStatuses((prev) => ({ ...prev, userGroup: validation.status }))
+          setValidationDetails((prev) => ({ ...prev, userGroup: validation }))
+          setUserConfig(data)
+          
+          if (validation.status == "fail") {
+            toast.error(validation.status.toUpperCase() + " (" +  validation.details.output + ")" || validation.message)
+          } else {
+            toast.success(validation.details.output)
+          }
+          setUserDialogOpen(false)
+        }
+      } catch (error: any) {
+        setCheckStatuses((prev) => ({ ...prev, userGroup: "error" }))
+        toast.error(error.message)
+      } finally {
+        setIsSettingUp((prev) => ({ ...prev, userGroup: false }))
+      }
+    } else {
+      setIsSettingUp((prev) => ({ ...prev, userGroup: true }))
+
+      try {
+        const result = await sshService.setupUserGroup(serverId, data.username, data.group, data.password)
+        if (result.success === false) {
+          throw new Error(result.message || "User setup failed")
+        }
+        
+        setUserConfig(data)
+        toast.success("User & Group setup completed successfully")
+        setUserDialogOpen(false)
+        await validateSingle("userGroup")
+      } catch (error: any) {
+        toast.error("Setup Failed: " + error.message)
+      } finally {
+        setIsSettingUp((prev) => ({ ...prev, userGroup: false }))
+      }
     }
   }
 
   const setupItem = async (itemKey: string) => {
+    if (!isConnected) {
+      toast.error("Please test connection first")
+      return
+    }
+
+    if (itemKey === "userGroup") {
+      setDialogMode("setup")
+      setUserDialogOpen(true)
+      return
+    }
+
     setIsSettingUp((prev) => ({ ...prev, [itemKey]: true }))
 
     try {
       let result: any
 
       switch (itemKey) {
-        case "userGroup":
-          result = await sshService.setupUserGroup(serverId)
-          break
         case "ulimit":
-          result = await sshService.setupUlimit(serverId)
+          result = await sshService.setupUlimit(serverId, userConfig.username)
+          if (result.success === false) {
+            throw new Error(result.message || "Ulimit setup failed")
+          }
+          toast.success("Ulimit setup completed successfully")
           break
         case "sysctl":
           result = await sshService.setupSysctl(serverId)
+          if (result.success === false) {
+            throw new Error(result.message || "Sysctl setup failed")
+          }
+          toast.success("Sysctl setup completed successfully")
           break
         default:
           throw new Error("Setup not available for this item")
       }
 
-      toast({
-        title: "Setup Successful",
-        description: `${configItems.find((i) => i.key === itemKey)?.label} has been configured`,
-      })
-
-      // Re-validate after setup
       await validateSingle(itemKey)
     } catch (error: any) {
-      toast({
-        title: "Setup Failed",
-        description: error.message,
-        variant: "destructive",
-      })
+      toast.error("Setup Failed: " + error.message)
     } finally {
       setIsSettingUp((prev) => ({ ...prev, [itemKey]: false }))
     }
   }
 
   const setupAll = async () => {
+    if (!isConnected) {
+      toast.error("Please test connection first")
+      return
+    }
+
     setIsValidatingAll(true)
     
     try {
-      await sshService.setupAll(serverId)
+      await sshService.setupAll(serverId, {
+        username: userConfig.username,
+        group: userConfig.group
+      })
       
       toast.success("Setup Complete")
-
       await validateAll()
     } catch (error: any) {
-      toast({
-        title: "Setup Failed",
-        description: error.message,
-        variant: "destructive",
-      })
+      toast.error("Setup Failed: " + error.message)
     } finally {
       setIsValidatingAll(false)
     }
@@ -236,18 +339,35 @@ export default function ConfigurationChecklist({ serverId, serverName }: Configu
           )}
         </div>
         <div className="flex gap-2">
-          <Button
-            onClick={setupAll}
-            disabled={isValidatingAll}
-            variant="outline"
-          >
-            {isValidatingAll && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-            Setup All
-          </Button>
-          <Button onClick={validateAll} disabled={isValidatingAll}>
-            {isValidatingAll && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-            Validate All
-          </Button>
+          {!isConnected ? (
+            <Button
+              onClick={testConnection}
+              disabled={isTestingConnection}
+              variant="default"
+            >
+              {isTestingConnection ? (
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+              ) : (
+                <WifiOff className="w-4 h-4 mr-2" />
+              )}
+              Test Connection
+            </Button>
+          ) : (
+            <>
+              <Button
+                onClick={setupAll}
+                disabled={isValidatingAll}
+                variant="outline"
+              >
+                {isValidatingAll && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                Setup All
+              </Button>
+              <Button onClick={validateAll} disabled={isValidatingAll}>
+                {isValidatingAll && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                Validate All
+              </Button>
+            </>
+          )}
         </div>
       </div>
 
@@ -258,7 +378,9 @@ export default function ConfigurationChecklist({ serverId, serverName }: Configu
           return (
             <div
               key={item.key}
-              className="flex items-center justify-between p-4 bg-foreground/5 border border-border rounded-lg hover:bg-foreground/10 transition-colors"
+              className={`flex items-center justify-between p-4 bg-foreground/5 border border-border rounded-lg transition-colors ${
+                isConnected ? "hover:bg-foreground/10" : "opacity-60"
+              }`}
             >
               <div className="flex items-start gap-4 flex-1">
                 <div className="mt-1">{getStatusIcon(checkStatuses[item.key])}</div>
@@ -283,7 +405,7 @@ export default function ConfigurationChecklist({ serverId, serverName }: Configu
                 <div className="flex md:flex-row flex-col gap-2">
                   <Button
                     onClick={() => validateSingle(item.key)}
-                    disabled={checkStatuses[item.key] === "checking" || isValidatingAll}
+                    disabled={!isConnected || checkStatuses[item.key] === "checking" || isValidatingAll}
                     size="sm"
                     className="text-xs"
                   >
@@ -296,7 +418,7 @@ export default function ConfigurationChecklist({ serverId, serverName }: Configu
                   {item.canSetup && (checkStatuses[item.key] === "fail" || checkStatuses[item.key] === "error") && (
                     <Button
                       onClick={() => setupItem(item.key)}
-                      disabled={isSettingUp[item.key] || isValidatingAll}
+                      disabled={!isConnected || isSettingUp[item.key] || isValidatingAll}
                       size="sm"
                       variant="secondary"
                       className="text-xs"
@@ -313,6 +435,15 @@ export default function ConfigurationChecklist({ serverId, serverName }: Configu
           )
         })}
       </div>
+      
+      <DialogUserGroup
+        open={userDialogOpen}
+        onOpenChange={setUserDialogOpen}
+        onSubmit={handleDialogSubmit}
+        defaultValues={userConfig}
+        isLoading={isSettingUp.userGroup}
+        mode={dialogMode}
+      />
     </Card>
   )
 }

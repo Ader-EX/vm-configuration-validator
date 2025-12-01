@@ -52,11 +52,7 @@ export class VmPrereqService {
   ) {}
 
   private async executeSSH(serverId: number, command: string): Promise<string> {
-    const server = await this.repo.findOne({
-      where: {
-        id: serverId,
-      },
-    });
+    const server = await this.sshListService.getDecryptedCredentials(serverId);
     if (!server) {
       throw new NotFoundException(`Server with ID ${serverId} not found`);
     }
@@ -102,26 +98,113 @@ export class VmPrereqService {
           host: server.address,
           port: Number(server.port) || 22,
           username: server.username,
-          passphrase: server.passphrase,
-          privateKey: server.ssh_key
-            ? fs.readFileSync(server.ssh_key.toString())
-            : undefined,
+          // passphrase: server.passphrase,
+          password: server.password,
+          // privateKey: server.ssh_key
+          //   ? fs.readFileSync(server.ssh_key.toString())
+          //   : undefined,
         });
     });
   }
 
-  private async checkUserGroup(
+  async setupUserGroup(
     serverId: number,
-    username: string = 'oracle',
-    group: string = 'dba',
+    username: string = 'wmuser',
+    group: string = 'wmuser',
+    password: string = 'wmuser123',
+  ): Promise<string> {
+    const script = `
+    # Create group if it doesn't exist
+    sudo groupadd -f ${group}
+    
+    # Create user if it doesn't exist
+    sudo useradd -m -g ${group} -s /bin/bash ${username} 2>/dev/null || echo "User already exists"
+    
+    # Set password for the user
+    echo "${username}:${password}" | sudo chpasswd
+    
+    # Add user to group
+    sudo usermod -aG ${group} ${username}
+    
+    # Verify user creation
+    id ${username}
+    
+    # Optional: Grant sudo privileges to wmuser (if needed)
+    # Uncomment the line below if wmuser needs sudo access
+    # echo "${username} ALL=(ALL) NOPASSWD:ALL" | sudo tee /etc/sudoers.d/${username}
+  `;
+    return await this.executeSSH(serverId, script);
+  }
+
+  async setupUlimit(
+    serverId: number,
+    username: string = 'wmuser',
+  ): Promise<string> {
+    const script = `
+    # Backup original file
+    sudo cp /etc/security/limits.conf /etc/security/limits.conf.backup
+    
+    # Remove old entries for this user if they exist
+    sudo sed -i "/${username}/d" /etc/security/limits.conf
+    
+    # Add new limits
+    sudo bash -c "cat >> /etc/security/limits.conf <<EOF
+# WebMethods user limits
+${username} soft nofile 10240
+${username} hard nofile 65536
+${username} soft nproc 2047
+${username} hard nproc 16384
+${username} soft stack 10240
+${username} hard stack 32768
+EOF"
+    
+    # Verify the configuration
+    echo "Current limits for ${username}:"
+    cat /etc/security/limits.conf | grep ${username}
+  `;
+    return await this.executeSSH(serverId, script);
+  }
+
+  async setupSysctl(serverId: number): Promise<string> {
+    const script = `
+      # Backup original file
+      sudo cp /etc/sysctl.conf /etc/sysctl.conf.backup
+
+      # Remove old WebMethods entries if they exist
+      sudo sed -i "/# WebMethods kernel parameters/,+4d" /etc/sysctl.conf
+
+      # Add new kernel parameters
+      sudo bash -c "cat >> /etc/sysctl.conf <<EOF
+
+      # WebMethods kernel parameters
+      vm.max_map_count = 262144
+      fs.file-max = 500000
+      net.core.somaxconn = 1024
+      net.ipv4.ip_local_port_range = 1024 65535
+      EOF"
+
+      # Apply the changes
+      sudo sysctl -p
+
+      # Verify the settings
+      echo "Current sysctl settings:"
+      sysctl vm.max_map_count fs.file-max net.core.somaxconn net.ipv4.ip_local_port_range
+    `;
+    return await this.executeSSH(serverId, script);
+  }
+
+  async checkUserGroup(
+    serverId: number,
+    username: string = 'wmuser',
+    group: string = 'wmuser',
   ): Promise<ValidationResult> {
     try {
       const command = `id ${username} 2>&1 && getent group ${group} 2>&1`;
       const output = await this.executeSSH(serverId, command);
 
-      const userExists = output.includes(`uid=`) && output.includes(username);
+      const userExists = output.includes('uid=') && output.includes(username);
       const groupExists = output.includes(group);
-      const userInGroup = output.includes(`groups=`) && output.includes(group);
+      const userInGroup = output.includes('groups=') && output.includes(group);
 
       if (userExists && groupExists && userInGroup) {
         return {
@@ -152,6 +235,21 @@ export class VmPrereqService {
         status: 'error',
         message: error.message,
       };
+    }
+  }
+
+  async verifyUserPassword(
+    serverId: number,
+    username: string = 'wmuser',
+  ): Promise<boolean> {
+    try {
+      const command = `sudo passwd -S ${username}`;
+      const output = await this.executeSSH(serverId, command);
+
+      return output.includes(`${username} P`);
+    } catch (error) {
+      console.error('Error verifying password:', error);
+      return false;
     }
   }
 
@@ -415,51 +513,6 @@ export class VmPrereqService {
     };
   }
 
-  async setupUserGroup(
-    serverId: number,
-    username: string = 'oracle',
-    group: string = 'dba',
-  ): Promise<string> {
-    const script = `
-      sudo groupadd -f ${group}
-      sudo useradd -m -g ${group} -s /bin/bash ${username} 2>/dev/null || echo "User already exists"
-      sudo usermod -aG ${group} ${username}
-      id ${username}
-    `;
-    return await this.executeSSH(serverId, script);
-  }
-
-  async setupUlimit(
-    serverId: number,
-    username: string = 'oracle',
-  ): Promise<string> {
-    const script = `
-      sudo bash -c "cat >> /etc/security/limits.conf <<EOF
-${username} soft nofile 10240
-${username} hard nofile 65536
-${username} soft nproc 2047
-${username} hard nproc 16384
-${username} soft stack 10240
-${username} hard stack 32768
-EOF"
-      cat /etc/security/limits.conf | grep ${username}
-    `;
-    return await this.executeSSH(serverId, script);
-  }
-
-  async setupSysctl(serverId: number): Promise<string> {
-    const script = `
-      sudo bash -c "cat >> /etc/sysctl.conf <<EOF
-vm.max_map_count = 262144
-fs.file-max = 500000
-net.core.somaxconn = 1024
-net.ipv4.ip_local_port_range = 1024 65535
-EOF"
-      sudo sysctl -p
-    `;
-    return await this.executeSSH(serverId, script);
-  }
-
   async setupAll(serverId: number, options?: any): Promise<any> {
     const results: {
       userGroup: any;
@@ -487,11 +540,11 @@ EOF"
       results.ulimit = { error: error.message };
     }
 
-    try {
-      results.sysctl = await this.setupSysctl(serverId);
-    } catch (error) {
-      results.sysctl = { error: error.message };
-    }
+    // try {
+    //   results.sysctl = await this.set(serverId);
+    // } catch (error) {
+    //   results.sysctl = { error: error.message };
+    // }
 
     return results;
   }

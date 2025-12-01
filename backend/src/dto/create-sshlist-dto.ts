@@ -4,6 +4,7 @@ export class CreateSshListDto {
   port: string;
   username: string;
   passphrase?: string = '';
+  password: string;
   userGroup?: number = 0;
   ulimit?: number = 0;
   securityLimits?: number = 0;

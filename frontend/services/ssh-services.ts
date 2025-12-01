@@ -27,8 +27,31 @@ export interface SetupResult {
 
 class SshService {
   private baseUrl = `${API_BASE_URL}/ssh`;
-  private prereqUrl = `${API_BASE_URL}/vm-prereq`; // Adjust based on your backend route
+  private prereqUrl = `${API_BASE_URL}/vm-prereq`;
 
+  async createServer(formData: FormData) {
+    try {
+      const response = await axios.post(`${this.baseUrl}`, formData, {
+        headers: {
+          "Content-Type": "multipart/form-data",
+        },
+      });
+      return response.data;
+    } catch (err) {
+      const error = err as AxiosError;
+      throw new Error("Failed to fetch servers: " + error.message);
+    }
+  }
+
+  async deleteServer(id: number) {
+    try {
+      const response = await axios.delete(`${this.baseUrl}/${id}`);
+      return response.data;
+    } catch (err) {
+      const error = err as AxiosError;
+      throw new Error("Failed to fetch servers: " + error.message);
+    }
+  }
   async getAllData(): Promise<Server[]> {
     try {
       const response = await axios.get(`${this.baseUrl}`);
@@ -66,16 +89,14 @@ class SshService {
   // Validate all prerequisites
   async validateAllPrerequisites(
     serverId: number,
-    options?: {
-      username?: string;
-      group?: string;
-      configPath?: string;
-    }
-  ): Promise<PrereqCheckResult> {
+    options?: any
+  ): Promise<any> {
     try {
       const response = await axios.get(
         `${this.prereqUrl}/validate/${serverId}`,
-        options || {}
+        {
+          params: options,
+        }
       );
       return response.data;
     } catch (err) {
@@ -106,16 +127,16 @@ class SshService {
     }
   }
 
-  // Setup user and group
   async setupUserGroup(
     serverId: number,
-    username: string = "oracle",
-    group: string = "dba"
+    username: string = "wmuser",
+    group: string = "wmuser",
+    password: string = "wmuser123"
   ): Promise<string> {
     try {
       const response = await axios.post(
         `${this.prereqUrl}/setup/${serverId}/user-group`,
-        { username, group }
+        { username, group, password }
       );
       return response.data;
     } catch (err) {

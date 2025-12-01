@@ -18,8 +18,10 @@ export class SshList {
   @Column()
   username: string;
 
+  // @Column()
+  // ssh_key: string;
   @Column()
-  ssh_key: string;
+  password: string;
 
   @Column({ nullable: true })
   passphrase: string;

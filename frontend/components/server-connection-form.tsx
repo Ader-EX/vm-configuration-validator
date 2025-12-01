@@ -13,18 +13,16 @@ interface ServerConnectionFormProps {
   onCancel: () => void
 }
 
-export default function ServerConnectionForm({ onSubmit, onCancel }: ServerConnectionFormProps) {
-
-  
+export default function ServerConnectionForm({ onSubmit, onCancel }: ServerConnectionFormProps) {  
   const [formData, setFormData] = useState({
     name: "",
     ipAddress: "",
     sshPort: 22,
     username: "root",
-    passphrase: ""
+    password: ""
   })
 
-  const [file, setFile] = useState<File>();
+  // const [file, setFile] = useState<File>();
 
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
@@ -35,20 +33,20 @@ export default function ServerConnectionForm({ onSubmit, onCancel }: ServerConne
     }))
   }
 
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-  const file = e.target.files?.[0] ;
-  setFile(file);
+//   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+//   const file = e.target.files?.[0] ;
+//   setFile(file);
   
-  // setFormData((prev) => ({
-  //   ...prev,
-  //   file: file,
-  // }));
-};
+//   // setFormData((prev) => ({
+//   //   ...prev,
+//   //   file: file,
+//   // }));
+// };
 
  
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
-    if (!formData.name || !formData.ipAddress || !file) {
+    if (!formData.name || !formData.ipAddress || !formData.password) {
       alert("Please fill in all required fields")
       return
     }
@@ -58,14 +56,18 @@ export default function ServerConnectionForm({ onSubmit, onCancel }: ServerConne
       address: formData.ipAddress,
       port: formData.sshPort,
       username: formData.username,
-      file: file,
-      passphrase: formData.passphrase || ""
+      // file: file,
+      // passphrase: formData.passphrase || "",
+      password : formData.password
       
     }
 
     onSubmit(newServer)
   }
 
+
+  
+ 
   return (
     <Card className="p-6 bg-card border border-border max-w-2xl">
       <h2 className="text-xl font-semibold mb-4">Add Server Connection</h2>
@@ -114,21 +116,22 @@ export default function ServerConnectionForm({ onSubmit, onCancel }: ServerConne
           <label className="block text-sm font-medium mb-1">Username</label>
           <Input
             type="text"
+            disabled
             name="username"
-            value={formData.username}
+            value={formData.username || "root"}
             onChange={handleChange}
             className="w-full bg-input border border-border text-foreground"
           />
         </div>
 
-        <div>
+        {/* <div>
           <label className="block text-sm font-medium mb-2">SSH Key (Private Key) *</label>
           <div className="space-y-2">
          <Input
   type="file"
   onChange={handleFileUpload}
   className="w-full bg-input border border-border text-foreground"
-/>
+/> */}
 
 
             {/* <Textarea
@@ -140,11 +143,23 @@ export default function ServerConnectionForm({ onSubmit, onCancel }: ServerConne
           /> */}
 
            
-            <p className="text-xs text-muted-foreground">Add your private SSH key</p>
+            {/* <p className="text-xs text-muted-foreground">Add your private SSH key</p>
            </div>
-        </div>
+        </div> */}
 
-        <div>
+         <div>
+            <label className="block text-sm font-medium mb-1">Password</label>
+            <Input
+              type="password"
+              name="password"
+              placeholder="Password"
+              value={formData.password}
+              onChange={handleChange}
+              className="w-full bg-input border border-border text-foreground"
+            />
+          </div>
+
+        {/* <div>
             <label className="block text-sm font-medium mb-1">Passphrase</label>
             <Input
               type="text"
@@ -154,7 +169,7 @@ export default function ServerConnectionForm({ onSubmit, onCancel }: ServerConne
               onChange={handleChange}
               className="w-full bg-input border border-border text-foreground"
             />
-          </div>
+          </div> */}
 
         <div className="flex justify-end gap-3 pt-4">
           <Button type="button" onClick={onCancel} className="bg-muted text-foreground hover:bg-muted/80">

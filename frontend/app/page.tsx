@@ -8,13 +8,14 @@ import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { sshService } from "@/services/ssh-services"
 import toast from 'react-hot-toast';
-import { AxiosError } from "axios"
+import axios, { AxiosError } from "axios"
 
 export type Server = {
-  id: number
+  id: any
   name: string
   address: string
   port: number
+  password : string
   username: string
   ssh_key : File
   passphrase: string
@@ -50,7 +51,6 @@ export default function Home() {
     garbageCollector: "not-configured",
   })
 
-useEffect(() => {
   const loadServers = async () => {
     const serverData = await sshService.getAllData();
 
@@ -58,7 +58,7 @@ useEffect(() => {
       setServers(serverData);  
     }
   };
-
+useEffect(() => {
   loadServers();
 }, []);
 
@@ -66,19 +66,45 @@ useEffect(() => {
     localStorage.setItem("vm-servers", JSON.stringify(servers))
   }, [servers])
 
-  const handleAddServer = (server: Server) => {
-    setServers([...servers, server])
-    setSelectedServer(server)
-    setShowAddServer(false)
-    addLog("info", `Server "${server.name}" added successfully`)
-  }
+const handleAddServer = async (server: Server) => {
+  try {
+    const formData = new FormData();
+    formData.append('name', server.name);
+    formData.append('address', server.address);
+    formData.append('port', String(server.port));
+    formData.append('username', server.username);
+    formData.append('password', server.password);
+    
 
-  const handleDeleteServer = (serverId: number) => {
-    setServers(servers.filter((s) => s.id !== serverId))
-    if (selectedServer?.id === serverId) {
-      setSelectedServer(null)
+    // formData.append('file', sshKeyFile);
+
+
+    const postData = await sshService.createServer(formData)
+
+    const createdServer = postData;
+
+
+    setServers([...servers, createdServer]);
+    setSelectedServer(createdServer);
+    setShowAddServer(false);
+    addLog("info", `Server "${createdServer.name}" added successfully`);
+
+    return createdServer;
+  } catch (error) {
+    addLog("error", `Failed to add server: ${error.message}`);
+    throw error;
+  }
+};
+  const handleDeleteServer = async (serverId: number) => {
+    try {
+    const response = await sshService.deleteServer(serverId)
+    toast.success("Data successfully deleted")
+    loadServers()
+    
+
+    } catch (error) {
+      toast.error("Something went wrong!")
     }
-    addLog("info", "Server deleted")
   }
 
   const addLog = (type: LogEntry["type"], message: string) => {
@@ -89,32 +115,6 @@ useEffect(() => {
       type,
     }
     setLogs((prev) => [newLog, ...prev])
-  }
-
-  const handleValidateConfig = async (itemKey: string) => {
-    setCheckStatuses((prev) => ({ ...prev, [itemKey]: "checking" }))
-    addLog("checking", `Validating ${itemKey}...`)
-
-    setTimeout(() => {
-      const isConfigured = Math.random() > 0.5 
-      setCheckStatuses((prev) => ({
-        ...prev,
-        [itemKey]: isConfigured ? "configured" : "not-configured",
-      }))
-      addLog(
-        isConfigured ? "success" : "error",
-        `${itemKey}: ${isConfigured ? "Configured ✓" : "Not configured - setup available"}`,
-      )
-    }, 1500)
-  }
-
-  const handleSetupConfig = async (itemKey: string) => {
-    addLog("checking", `Setting up ${itemKey}...`)
-    setCheckStatuses((prev) => ({ ...prev, [itemKey]: "checking" }))
-    setTimeout(() => {
-      setCheckStatuses((prev) => ({ ...prev, [itemKey]: "configured" }))
-      addLog("success", `${itemKey}: Setup completed successfully ✓`)
-    }, 2000)
   }
 
   return (
@@ -151,7 +151,7 @@ useEffect(() => {
                         {selectedServer.address}:{selectedServer.port}
                       </p>
                     </div>
-                   <Button
+                   {/* <Button
   onClick={async () => {
     const t = toast.loading("Testing connection...");
 
@@ -170,7 +170,7 @@ useEffect(() => {
   className="bg-primary text-primary-foreground hover:bg-primary/90"
 >
   Test Connection
-</Button>
+</Button> */}
 
                   </div>
                 </Card>
@@ -178,11 +178,10 @@ useEffect(() => {
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                   {/* Checklist */}
                   <div className="lg:col-span-3">
-                    <ConfigurationChecklist
-                      checkStatuses={checkStatuses}
-                      onValidate={handleValidateConfig}
-                      onSetup={handleSetupConfig}
-                    />
+                 <ConfigurationChecklist
+                 serverId={selectedServer.id}
+     serverName={selectedServer.name}
+   />
                   </div>
 
                   {/* Execution Log */}
