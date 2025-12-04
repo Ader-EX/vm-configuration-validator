@@ -11,19 +11,15 @@ import { Repository } from 'typeorm';
 // 1. Cek user udah ada di dba apa belom, posisi user group dan user cek wmuser ada atau tidaknya.
 //    kalau belum, kita bisa klik 1 tombol utk create usernya
 // 2. cek batasan resource ulimit, patokanya
-// Open files ≥ 10.240
-// Max process ≥ 2.047
-// Stack size ≥ 8.192 KB
-
+//    Open files ≥ 10.240
+//    Max process ≥ 2.047
+//    Stack size ≥ 8.192 KB
 // 3. Cek security limit, cek nprocnya aja
-
 // 4. cek Sysctl,
-// vm.max_map_count ≥ 262144
-// fs.file-max ≥ 500000
-// net.core.somaxconn ≥ 1024
-
+//    vm.max_map_count ≥ 262144
+//    fs.file-max ≥ 500000
+//    net.core.somaxconn ≥ 1024
 // 5. Cek JVM versinya diatas 11?? sama udah diset JAVA_HOMEnya?
-
 // 6. Cek Thread pool di application.properties
 // 7. Cek Garbage collectornya make heap apa (Xms/Xmx) sama GC modern apa belom
 
@@ -149,14 +145,14 @@ export class VmPrereqService {
     
     # Add new limits
     sudo bash -c "cat >> /etc/security/limits.conf <<EOF
-# WebMethods user limits
-${username} soft nofile 10240
-${username} hard nofile 65536
-${username} soft nproc 2047
-${username} hard nproc 16384
-${username} soft stack 10240
-${username} hard stack 32768
-EOF"
+    # WebMethods user limits
+    ${username} soft nofile 10240
+    ${username} hard nofile 65536
+    ${username} soft nproc 2047
+    ${username} hard nproc 16384
+    ${username} soft stack 10240
+    ${username} hard stack 32768
+    EOF"
     
     # Verify the configuration
     echo "Current limits for ${username}:"
@@ -254,7 +250,7 @@ EOF"
   }
 
   // 2. Check Ulimit
-  private async checkUlimit(
+  async checkUlimit(
     serverId: number,
     username: string = 'oracle',
   ): Promise<ValidationResult> {
@@ -295,9 +291,7 @@ EOF"
   }
 
   // 3. Check Security Limits
-  private async checkSecurityLimits(
-    serverId: number,
-  ): Promise<ValidationResult> {
+  async checkSecurityLimits(serverId: number): Promise<ValidationResult> {
     try {
       const command = `cat /etc/security/limits.conf 2>&1; echo "---DIVIDER---"; ls -la /etc/security/limits.d/ 2>&1`;
       const output = await this.executeSSH(serverId, command);
@@ -328,7 +322,7 @@ EOF"
   }
 
   // 4. Check Sysctl
-  private async checkSysctl(serverId: number): Promise<ValidationResult> {
+  async checkSysctl(serverId: number): Promise<ValidationResult> {
     try {
       const command = `sysctl vm.max_map_count fs.file-max net.core.somaxconn net.ipv4.ip_local_port_range 2>&1`;
       const output = await this.executeSSH(serverId, command);
@@ -373,7 +367,7 @@ EOF"
   }
 
   // 5. Check JVM
-  private async checkJvm(serverId: number): Promise<ValidationResult> {
+  async checkJvm(serverId: number): Promise<ValidationResult> {
     try {
       const command = `java -version 2>&1; echo "---"; echo $JAVA_HOME`;
       const output = await this.executeSSH(serverId, command);
@@ -393,7 +387,7 @@ EOF"
         message:
           isValidVersion && hasJavaHome
             ? `Java ${majorVersion} installed`
-            : 'Java installation incomplete',
+            : 'Java installation not found or has an outdated version (<11)',
         details: { majorVersion, hasJavaHome, output: output.trim() },
       };
     } catch (error) {
@@ -407,7 +401,7 @@ EOF"
   }
 
   // 6. Check Thread Pool
-  private async checkThreadPool(
+  async checkThreadPool(
     serverId: number,
     configPath: string = '/opt/app/config/application.properties',
   ): Promise<ValidationResult> {
@@ -439,11 +433,9 @@ EOF"
   }
 
   // 7. Check Garbage Collector
-  private async checkGarbageCollector(
-    serverId: number,
-  ): Promise<ValidationResult> {
+  async checkGarbageCollector(serverId: number): Promise<ValidationResult> {
     try {
-      const command = `ps aux | grep java | grep -E 'UseG1GC|UseZGC|UseShenandoahGC|Xms|Xmx' | head -1 || echo "No JVM process found"`;
+      const command = `ps aux | grep '[j]ava' | grep -E 'UseG1GC|UseZGC|UseShenandoahGC|Xms|Xmx' | head -1 | grep -q . || echo "No JVM process found"`;
       const output = await this.executeSSH(serverId, command);
 
       const hasGC =

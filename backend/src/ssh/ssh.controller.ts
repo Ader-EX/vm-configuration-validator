@@ -28,10 +28,7 @@ export class SshController {
       dest: './uploads/sshkeys',
     }),
   )
-  create(
-    @Body() dto: CreateSshListDto,
-    @UploadedFile() file: Express.Multer.File,
-  ) {
+  create(@Body() dto: CreateSshListDto, @UploadedFile() file: any) {
     return this.sshListService.create(dto, file);
   }
 

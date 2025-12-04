@@ -5,6 +5,7 @@ import { CheckCircle2, AlertCircle, Loader2, XCircle, WifiOff } from "lucide-rea
 import toast from "react-hot-toast"
 import { sshService } from "@/services/ssh-services"
 import { DialogUserGroup } from "./setup-dialogs/user-group-dialog"
+import { DialogULimit } from "./setup-dialogs/ulimit-dialog"
 
 interface ConfigurationChecklistProps {
   serverId: number
@@ -13,7 +14,7 @@ interface ConfigurationChecklistProps {
 
 const configItems = [
   {
-    key: "userGroup",
+    key: "user-group",
     label: "User & Group Setup",
     description: "username:group (password)",
     path: "User account and group configuration",
@@ -27,7 +28,7 @@ const configItems = [
     canSetup: true,
   },
   {
-    key: "securityLimits",
+    key: "security-limit",
     label: "Security Limits",
     description: "/etc/security/limits.d/",
     path: "Additional security limit configurations",
@@ -45,17 +46,17 @@ const configItems = [
     label: "JVM Installation",
     description: "Java 11+",
     path: "Java Virtual Machine setup",
-    canSetup: false,
+    canSetup: true,
   },
   {
-    key: "threadPool",
+    key: "thread-pool",
     label: "Thread Pool Settings",
     description: "Thread configuration",
     path: "Thread pool optimization",
     canSetup: false,
   },
   {
-    key: "garbageCollector",
+    key: "garbage-collector",
     label: "Garbage Collector Config",
     description: "GC tuning",
     path: "Garbage collector configuration",
@@ -75,6 +76,7 @@ export default function ConfigurationChecklist({ serverId, serverName }: Configu
   const [isValidatingAll, setIsValidatingAll] = useState(false)
   const [isSettingUp, setIsSettingUp] = useState<Record<string, boolean>>({})
   const [userDialogOpen, setUserDialogOpen] = useState(false)
+  const [ulimitDialogOpen, setUlimitDialogOpen] = useState(false)
   const [dialogMode, setDialogMode] = useState<"validate" | "setup">("validate")
   const [userConfig, setUserConfig] = useState({
     username: "wmuser",
@@ -106,7 +108,7 @@ export default function ConfigurationChecklist({ serverId, serverName }: Configu
       case "pass":
         return <CheckCircle2 className="w-5 h-5 text-green-500" />
       case "fail":
-        return <AlertCircle className="w-5 h-5 text-yellow-500" />
+        return <XCircle className="w-5 h-5 text-red-500" />
       case "error":
         return <XCircle className="w-5 h-5 text-red-500" />
       case "checking":
@@ -153,7 +155,7 @@ export default function ConfigurationChecklist({ serverId, serverName }: Configu
       const newStatuses: Record<string, CheckStatus> = {}
       const newDetails: Record<string, any> = {}
       
-      result.validations.forEach((validation) => {
+      result.validations.forEach((validation: any) => {
         newStatuses[validation.key] = validation.status
         newDetails[validation.key] = validation
       })
@@ -180,28 +182,43 @@ export default function ConfigurationChecklist({ serverId, serverName }: Configu
       return
     }
 
-    if (itemKey === "userGroup") {
+    // Handle special dialogs
+    if (itemKey === "user-group") {
       setDialogMode("validate")
       setUserDialogOpen(true)
       return
     }
 
+    if (itemKey === "ulimit") {
+      setDialogMode("validate")
+      setUlimitDialogOpen(true)
+      return
+    }
+   
     setCheckStatuses((prev) => ({ ...prev, [itemKey]: "checking" }))
 
     try {
-      const result = await sshService.validateAllPrerequisites(serverId, {
+      // Call the specific validation endpoint
+      const result = await sshService.validatePrerequisite(serverId, itemKey, {
         username: userConfig.username,
         group: userConfig.group
       })
-      const validation = result.validations.find((v) => v.key === itemKey)
+      
+      // The result now has a single validation object, not an array
+      const validation = result.validation
       
       if (validation) {
         setCheckStatuses((prev) => ({ ...prev, [itemKey]: validation.status }))
         setValidationDetails((prev) => ({ ...prev, [itemKey]: validation }))
-        if (validation.status == "fail") {
-          toast.error(validation.status.toUpperCase() + " (" +  validation.details.output + ")" || validation.message)
+        
+        if (validation.status === "fail") {
+          const errorMsg = validation.details?.output || validation.message
+          toast.error(`${validation.status.toUpperCase()}: ${errorMsg}`)
+        } else if (validation.status === "pass") {
+          const successMsg = validation.details?.output || validation.message
+          toast.success(successMsg)
         } else {
-          toast.success(validation.details.output)
+          toast.error(validation.message)
         }
       }
     } catch (error: any) {
@@ -210,39 +227,39 @@ export default function ConfigurationChecklist({ serverId, serverName }: Configu
     }
   }
 
-  const handleDialogSubmit = async (data: { username: string; group: string; password: string }) => {
+  const handleUserDialogSubmit = async (data: any, itemKey: string) => {
     if (dialogMode === "validate") {
-      setIsSettingUp((prev) => ({ ...prev, userGroup: true }))
-      setCheckStatuses((prev) => ({ ...prev, userGroup: "checking" }))
+      setIsSettingUp((prev) => ({ ...prev, "user-group": true }))
+      setCheckStatuses((prev) => ({ ...prev, "user-group": "checking" }))
       
       try {
-        console.log(data.username, data.group)
-        const result = await sshService.validateAllPrerequisites(serverId, {
+        const result = await sshService.validatePrerequisite(serverId, "user-group", {
           username: data.username,
           group: data.group
         })
-        const validation = result.validations.find((v) => v.key === "userGroup")
+        
+        const validation = result.validation
         
         if (validation) {
-          setCheckStatuses((prev) => ({ ...prev, userGroup: validation.status }))
-          setValidationDetails((prev) => ({ ...prev, userGroup: validation }))
+          setCheckStatuses((prev) => ({ ...prev, "user-group": validation.status }))
+          setValidationDetails((prev) => ({ ...prev, "user-group": validation }))
           setUserConfig(data)
           
-          if (validation.status == "fail") {
-            toast.error(validation.status.toUpperCase() + " (" +  validation.details.output + ")" || validation.message)
+          if (validation.status === "fail") {
+            toast.error(`${validation.status.toUpperCase()}: ${validation.details?.output || validation.message}`)
           } else {
-            toast.success(validation.details.output)
+            toast.success(validation.details?.output || validation.message)
           }
           setUserDialogOpen(false)
         }
       } catch (error: any) {
-        setCheckStatuses((prev) => ({ ...prev, userGroup: "error" }))
+        setCheckStatuses((prev) => ({ ...prev, "user-group": "error" }))
         toast.error(error.message)
       } finally {
-        setIsSettingUp((prev) => ({ ...prev, userGroup: false }))
+        setIsSettingUp((prev) => ({ ...prev, "user-group": false }))
       }
     } else {
-      setIsSettingUp((prev) => ({ ...prev, userGroup: true }))
+      setIsSettingUp((prev) => ({ ...prev, "user-group": true }))
 
       try {
         const result = await sshService.setupUserGroup(serverId, data.username, data.group, data.password)
@@ -253,11 +270,60 @@ export default function ConfigurationChecklist({ serverId, serverName }: Configu
         setUserConfig(data)
         toast.success("User & Group setup completed successfully")
         setUserDialogOpen(false)
-        await validateSingle("userGroup")
+        await validateSingle("user-group")
       } catch (error: any) {
         toast.error("Setup Failed: " + error.message)
       } finally {
-        setIsSettingUp((prev) => ({ ...prev, userGroup: false }))
+        setIsSettingUp((prev) => ({ ...prev, "user-group": false }))
+      }
+    }
+  }
+
+  const handleUlimitDialogSubmit = async (data: any, itemKey: string) => {
+    if (dialogMode === "validate") {
+      setIsSettingUp((prev) => ({ ...prev, ulimit: true }))
+      setCheckStatuses((prev) => ({ ...prev, ulimit: "checking" }))
+      
+      try {
+        const result = await sshService.validatePrerequisite(serverId, "ulimit", {
+          username: data.username
+        })
+        
+        const validation = result.validation
+        
+        if (validation) {
+          setCheckStatuses((prev) => ({ ...prev, ulimit: validation.status }))
+          setValidationDetails((prev) => ({ ...prev, ulimit: validation }))
+          
+          if (validation.status === "fail") {
+            toast.error(`${validation.status.toUpperCase()}: ${validation.details?.output || validation.message}`)
+          } else {
+            toast.success(validation.details?.output || validation.message)
+          }
+          setUlimitDialogOpen(false)
+        }
+      } catch (error: any) {
+        setCheckStatuses((prev) => ({ ...prev, ulimit: "error" }))
+        toast.error(error.message)
+      } finally {
+        setIsSettingUp((prev) => ({ ...prev, ulimit: false }))
+      }
+    } else {
+      setIsSettingUp((prev) => ({ ...prev, ulimit: true }))
+
+      try {
+        const result = await sshService.setupUlimit(serverId, data.username)
+        if (result.success === false) {
+          throw new Error(result.message || "Ulimit setup failed")
+        }
+        
+        toast.success("Ulimit setup completed successfully")
+        setUlimitDialogOpen(false)
+        await validateSingle("ulimit")
+      } catch (error: any) {
+        toast.error("Setup Failed: " + error.message)
+      } finally {
+        setIsSettingUp((prev) => ({ ...prev, ulimit: false }))
       }
     }
   }
@@ -268,9 +334,15 @@ export default function ConfigurationChecklist({ serverId, serverName }: Configu
       return
     }
 
-    if (itemKey === "userGroup") {
+    if (itemKey === "user-group") {
       setDialogMode("setup")
       setUserDialogOpen(true)
+      return
+    }
+
+    if (itemKey === "ulimit") {
+      setDialogMode("setup")
+      setUlimitDialogOpen(true)
       return
     }
 
@@ -280,19 +352,19 @@ export default function ConfigurationChecklist({ serverId, serverName }: Configu
       let result: any
 
       switch (itemKey) {
-        case "ulimit":
-          result = await sshService.setupUlimit(serverId, userConfig.username)
-          if (result.success === false) {
-            throw new Error(result.message || "Ulimit setup failed")
-          }
-          toast.success("Ulimit setup completed successfully")
-          break
         case "sysctl":
           result = await sshService.setupSysctl(serverId)
           if (result.success === false) {
             throw new Error(result.message || "Sysctl setup failed")
           }
           toast.success("Sysctl setup completed successfully")
+          break
+        case "jvm":
+          result = await sshService.setupJvm(serverId, { version: 11, osType: "rhel" })
+          if (result.success === false) {
+            throw new Error(result.message || "JVM setup failed")
+          }
+          toast.success("JVM setup completed successfully")
           break
         default:
           throw new Error("Setup not available for this item")
@@ -439,9 +511,18 @@ export default function ConfigurationChecklist({ serverId, serverName }: Configu
       <DialogUserGroup
         open={userDialogOpen}
         onOpenChange={setUserDialogOpen}
-        onSubmit={handleDialogSubmit}
+        onSubmit={handleUserDialogSubmit}
         defaultValues={userConfig}
-        isLoading={isSettingUp.userGroup}
+        isLoading={isSettingUp["user-group"]}
+        mode={dialogMode}
+      />
+
+      <DialogULimit
+        open={ulimitDialogOpen}
+        onOpenChange={setUlimitDialogOpen}
+        onSubmit={handleUlimitDialogSubmit}
+        defaultValues={userConfig}
+        isLoading={isSettingUp.ulimit}
         mode={dialogMode}
       />
     </Card>

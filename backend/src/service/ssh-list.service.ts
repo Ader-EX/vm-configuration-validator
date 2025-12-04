@@ -106,7 +106,7 @@ export class SshListService {
     return decrypted;
   }
 
-  async create(dto: CreateSshListDto, file: Express.Multer.File) {
+  async create(dto: CreateSshListDto, file: any) {
     // if (!file) {
     //   throw new HttpException('SSH key file is required', 400);
     // }

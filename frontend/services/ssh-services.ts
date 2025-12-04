@@ -11,18 +11,29 @@ export interface ValidationResult {
   details?: any;
 }
 
-export interface PrereqCheckResult {
+// Response for single validation endpoint
+export interface SingleValidationResponse {
+  success: boolean;
   serverId: number;
   serverName: string;
-  timestamp: Date;
-  validations: ValidationResult[];
+  timestamp: string;
+  validation: ValidationResult;
+}
+
+// Response for validate all endpoint
+export interface AllValidationsResponse {
+  success: boolean;
+  serverId: number;
+  serverName: string;
+  timestamp: string;
   overallStatus: "pass" | "partial" | "fail";
+  validations: ValidationResult[]; // Array
 }
 
 export interface SetupResult {
-  userGroup: any;
-  ulimit: any;
-  sysctl: any;
+  success: boolean;
+  message: string;
+  output?: any;
 }
 
 class SshService {
@@ -38,8 +49,10 @@ class SshService {
       });
       return response.data;
     } catch (err) {
-      const error = err as AxiosError;
-      throw new Error("Failed to fetch servers: " + error.message);
+      const error = err as AxiosError<any>;
+      throw new Error(
+        error?.response?.data?.message || "Failed to create server"
+      );
     }
   }
 
@@ -48,17 +61,22 @@ class SshService {
       const response = await axios.delete(`${this.baseUrl}/${id}`);
       return response.data;
     } catch (err) {
-      const error = err as AxiosError;
-      throw new Error("Failed to fetch servers: " + error.message);
+      const error = err as AxiosError<any>;
+      throw new Error(
+        error?.response?.data?.message || "Failed to delete server"
+      );
     }
   }
+
   async getAllData(): Promise<Server[]> {
     try {
       const response = await axios.get(`${this.baseUrl}`);
       return response.data;
     } catch (err) {
-      const error = err as AxiosError;
-      throw new Error("Failed to fetch servers: " + error.message);
+      const error = err as AxiosError<any>;
+      throw new Error(
+        error?.response?.data?.message || "Failed to fetch servers"
+      );
     }
   }
 
@@ -78,7 +96,7 @@ class SshService {
         data: null,
       };
     } catch (err: any) {
-      const error = err as AxiosError;
+      const error = err as AxiosError<any>;
       console.error("Connection test error:", error);
       throw new Error(
         error?.response?.data?.message || "Connection test failed"
@@ -86,11 +104,15 @@ class SshService {
     }
   }
 
-  // Validate all prerequisites
+  // Validate all prerequisites - returns array of validations
   async validateAllPrerequisites(
     serverId: number,
-    options?: any
-  ): Promise<any> {
+    options?: {
+      username?: string;
+      group?: string;
+      configPath?: string;
+    }
+  ): Promise<AllValidationsResponse> {
     try {
       const response = await axios.get(
         `${this.prereqUrl}/validate/${serverId}`,
@@ -100,39 +122,45 @@ class SshService {
       );
       return response.data;
     } catch (err) {
-      const error = err as AxiosError;
+      const error = err as AxiosError<any>;
       throw new Error(
         error?.response?.data?.message || "Failed to validate prerequisites"
       );
     }
   }
 
-  // Validate individual prerequisite
+  // Validate individual prerequisite - returns single validation
   async validatePrerequisite(
     serverId: number,
     checkKey: string,
-    options?: any
-  ): Promise<ValidationResult> {
+    options?: {
+      username?: string;
+      group?: string;
+    }
+  ): Promise<SingleValidationResponse> {
     try {
-      const response = await axios.post(
+      const response = await axios.get(
         `${this.prereqUrl}/validate/${serverId}/${checkKey}`,
-        options || {}
+        {
+          params: options,
+        }
       );
       return response.data;
     } catch (err) {
-      const error = err as AxiosError;
+      const error = err as AxiosError<any>;
       throw new Error(
         error?.response?.data?.message || `Failed to validate ${checkKey}`
       );
     }
   }
 
+  // Setup user and group
   async setupUserGroup(
     serverId: number,
     username: string = "wmuser",
     group: string = "wmuser",
     password: string = "wmuser123"
-  ): Promise<string> {
+  ): Promise<SetupResult> {
     try {
       const response = await axios.post(
         `${this.prereqUrl}/setup/${serverId}/user-group`,
@@ -140,7 +168,7 @@ class SshService {
       );
       return response.data;
     } catch (err) {
-      const error = err as AxiosError;
+      const error = err as AxiosError<any>;
       throw new Error(
         error?.response?.data?.message || "Failed to setup user and group"
       );
@@ -150,16 +178,16 @@ class SshService {
   // Setup ulimit
   async setupUlimit(
     serverId: number,
-    username: string = "oracle"
-  ): Promise<string> {
+    username: string = "wmuser"
+  ): Promise<SetupResult> {
     try {
       const response = await axios.post(
-        `${this.prereqUrl}/setup/${serverId}/ulimit`,
+        `${this.prereqUrl}/setup/ulimit/${serverId}`,
         { username }
       );
       return response.data;
     } catch (err) {
-      const error = err as AxiosError;
+      const error = err as AxiosError<any>;
       throw new Error(
         error?.response?.data?.message || "Failed to setup ulimit"
       );
@@ -167,20 +195,41 @@ class SshService {
   }
 
   // Setup sysctl
-  async setupSysctl(serverId: number): Promise<string> {
+  async setupSysctl(serverId: number): Promise<SetupResult> {
     try {
       const response = await axios.post(
-        `${this.prereqUrl}/setup/${serverId}/sysctl`
+        `${this.prereqUrl}/setup/sysctl/${serverId}`
       );
       return response.data;
     } catch (err) {
-      const error = err as AxiosError;
+      const error = err as AxiosError<any>;
       throw new Error(
         error?.response?.data?.message || "Failed to setup sysctl"
       );
     }
   }
 
+  // Setup JVM
+  async setupJvm(
+    serverId: number,
+    options?: {
+      version?: number;
+      osType?: "rhel" | "debian";
+    }
+  ): Promise<SetupResult> {
+    try {
+      const response = await axios.post(
+        `${this.prereqUrl}/setup/${serverId}/jvm`,
+        options || {}
+      );
+      return response.data;
+    } catch (err) {
+      const error = err as AxiosError<any>;
+      throw new Error(error?.response?.data?.message || "Failed to setup JVM");
+    }
+  }
+
+  // Setup all prerequisites
   async setupAll(
     serverId: number,
     options?: {
@@ -190,12 +239,12 @@ class SshService {
   ): Promise<SetupResult> {
     try {
       const response = await axios.post(
-        `${this.prereqUrl}/setup/${serverId}/all`,
+        `${this.prereqUrl}/setup/all/${serverId}`,
         options || {}
       );
       return response.data;
     } catch (err) {
-      const error = err as AxiosError;
+      const error = err as AxiosError<any>;
       throw new Error(
         error?.response?.data?.message || "Failed to setup prerequisites"
       );

@@ -22,6 +22,7 @@ export class VmPrereqController {
   /**
    * GET /vm-prereq/validate/:serverId
    * Query params: ?username=wmuser&group=wmuser&configPath=/opt/app/config
+   * Returns all validations
    */
   @Get('validate/:serverId')
   async validateAll(
@@ -31,11 +32,20 @@ export class VmPrereqController {
     @Query('configPath') configPath?: string,
   ) {
     try {
-      return await this.vmPrereqService.validateAll(+serverId, {
+      const result = await this.vmPrereqService.validateAll(+serverId, {
         username,
         group,
         configPath,
       });
+
+      return {
+        success: result.overallStatus === 'pass',
+        serverId: result.serverId,
+        serverName: result.serverName,
+        timestamp: result.timestamp,
+        overallStatus: result.overallStatus,
+        validations: result.validations,
+      };
     } catch (error) {
       throw new HttpException(
         {
@@ -49,65 +59,220 @@ export class VmPrereqController {
   }
 
   /**
-   * GET /vm-prereq/validate/:serverId/:checkType
-   * checkType: userGroup, ulimit, securityLimits, sysctl, jvm, threadPool, garbageCollector
+   * GET /vm-prereq/validate/:serverId/user-group
+   * Returns single validation result
    */
-  // @Get('validate/:serverId/:checkType')
-  // async validateSpecific(
-  //   @Param('serverId') serverId: string,
-  //   @Param('checkType') checkType: string,
-  //   @Query('username') username?: string,
-  //   @Query('group') group?: string,
-  //   @Query('configPath') configPath?: string,
-  // ) {
-  //   try {
-  //     const validCheckTypes = [
-  //       'userGroup',
-  //       'ulimit',
-  //       'securityLimits',
-  //       'sysctl',
-  //       'jvm',
-  //       'threadPool',
-  //       'garbageCollector',
-  //     ];
+  @Get('validate/:serverId/user-group')
+  async validateUserGroup(
+    @Param('serverId') serverId: string,
+    @Query('username') username?: string,
+    @Query('group') group?: string,
+  ) {
+    try {
+      const result = await this.vmPrereqService.checkUserGroup(
+        +serverId,
+        username || 'wmuser',
+        group || 'wmuser',
+      );
 
-  //     if (!validCheckTypes.includes(checkType)) {
-  //       throw new HttpException(
-  //         {
-  //           success: false,
-  //           message: `Invalid check type. Valid types: ${validCheckTypes.join(', ')}`,
-  //         },
-  //         HttpStatus.BAD_REQUEST,
-  //       );
-  //     }
+      const server = await this.repo.findOne(+serverId);
 
-  //     const result = await this.vmPrereqService.validateAll(+serverId, {
-  //       username,
-  //       group,
-  //       configPath,
-  //     });
+      return {
+        success: result.status === 'pass',
+        serverId: +serverId,
+        serverName: server?.name || 'Unknown',
+        timestamp: new Date().toISOString(),
+        validation: result,
+      };
+    } catch (error) {
+      throw new HttpException(
+        {
+          success: false,
+          message: 'User and group validation failed',
+          error: error.message,
+        },
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
 
-  //     const specificValidation = result.validations.find(
-  //       (v) => v.key === checkType,
-  //     );
+  /**
+   * GET /vm-prereq/validate/:serverId/ulimit
+   * Returns single validation result
+   */
+  @Get('validate/:serverId/ulimit')
+  async validateULimit(
+    @Param('serverId') serverId: string,
+    @Query('username') username?: string,
+  ) {
+    try {
+      const result = await this.vmPrereqService.checkUlimit(
+        +serverId,
+        username || 'wmuser',
+      );
 
-  //     return {
-  //       serverId: result.serverId,
-  //       serverName: result.serverName,
-  //       timestamp: result.timestamp,
-  //       validation: specificValidation,
-  //     };
-  //   } catch (error) {
-  //     throw new HttpException(
-  //       {
-  //         success: false,
-  //         message: 'Validation failed',
-  //         error: error.message,
-  //       },
-  //       HttpStatus.INTERNAL_SERVER_ERROR,
-  //     );
-  //   }
-  // }
+      const server = await this.repo.findOne(+serverId);
+
+      // Uniform response format
+      return {
+        success: result.status === 'pass',
+        serverId: +serverId,
+        serverName: server?.name || 'Unknown',
+        timestamp: new Date().toISOString(),
+        validation: result,
+      };
+    } catch (error) {
+      throw new HttpException(
+        {
+          success: false,
+          message: 'Ulimit validation failed',
+          error: error.message,
+        },
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+
+  /**
+   * GET /vm-prereq/validate/:serverId/sysctl
+   * Returns single validation result
+   */
+  @Get('validate/:serverId/sysctl')
+  async validateSysctl(@Param('serverId') serverId: string) {
+    try {
+      const result = await this.vmPrereqService.checkSysctl(+serverId);
+
+      const server = await this.repo.findOne(+serverId);
+
+      return {
+        success: result.status === 'pass',
+        serverId: +serverId,
+        serverName: server?.name || 'Unknown',
+        timestamp: new Date().toISOString(),
+        validation: result,
+      };
+    } catch (error) {
+      throw new HttpException(
+        {
+          success: false,
+          message: 'Sysctl validation failed',
+          error: error.message,
+        },
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+
+  /**
+   * GET /vm-prereq/validate/:serverId/security-limits
+   * Returns single validation result
+   */
+  @Get('validate/:serverId/security-limit')
+  async validateSecurityLimits(@Param('serverId') serverId: string) {
+    try {
+      const result = await this.vmPrereqService.checkSecurityLimits(+serverId);
+
+      const server = await this.repo.findOne(+serverId);
+
+      // Uniform response format
+      return {
+        success: result.status === 'pass',
+        serverId: +serverId,
+        serverName: server?.name || 'Unknown',
+        timestamp: new Date().toISOString(),
+        validation: result,
+      };
+    } catch (error) {
+      throw new HttpException(
+        {
+          success: false,
+          message: 'Security limits validation failed',
+          error: error.message,
+        },
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+
+  @Get('validate/:serverId/jvm')
+  async validateJVM(@Param('serverId') serverId: string) {
+    try {
+      const result = await this.vmPrereqService.checkJvm(+serverId);
+
+      const server = await this.repo.findOne(+serverId);
+
+      return {
+        success: result.status === 'pass',
+        serverId: +serverId,
+        serverName: server?.name || 'Unknown',
+        timestamp: new Date().toISOString(),
+        validation: result,
+      };
+    } catch (error) {
+      throw new HttpException(
+        {
+          success: false,
+          message: 'JVM validation failed',
+          error: error.message,
+        },
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+
+  @Get('validate/:serverId/thread-pool')
+  async validateThreadPool(@Param('serverId') serverId: string) {
+    try {
+      const result = await this.vmPrereqService.checkThreadPool(+serverId);
+
+      const server = await this.repo.findOne(+serverId);
+
+      return {
+        success: result.status === 'pass',
+        serverId: +serverId,
+        serverName: server?.name || 'Unknown',
+        timestamp: new Date().toISOString(),
+        validation: result,
+      };
+    } catch (error) {
+      throw new HttpException(
+        {
+          success: false,
+          message: 'Thread pool validation failed',
+          error: error.message,
+        },
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+
+  @Get('validate/:serverId/garbage-collector')
+  async validateGarbageCollector(@Param('serverId') serverId: string) {
+    try {
+      const result =
+        await this.vmPrereqService.checkGarbageCollector(+serverId);
+
+      const server = await this.repo.findOne(+serverId);
+
+      return {
+        success: result.status === 'pass',
+        serverId: +serverId,
+        serverName: server?.name || 'Unknown',
+        timestamp: new Date().toISOString(),
+        validation: result,
+      };
+    } catch (error) {
+      throw new HttpException(
+        {
+          success: false,
+          message: 'Garbage Collector validation failed',
+          error: error.message,
+        },
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+
   @Post('setup/:serverId/user-group')
   async setupUserGroup(
     @Param('serverId') serverId: string,
@@ -137,39 +302,6 @@ export class VmPrereqController {
     }
   }
 
-  @Get('validate/:serverId/user-group')
-  async validateUserGroup(
-    @Param('serverId') serverId: string,
-    @Query('username') username?: string,
-    @Query('group') group?: string,
-  ) {
-    try {
-      const result = await this.vmPrereqService.checkUserGroup(
-        +serverId,
-        username || 'wmuser',
-        group || 'wmuser',
-      );
-      return {
-        success: result.status === 'pass',
-        validation: result,
-      };
-    } catch (error) {
-      throw new HttpException(
-        {
-          success: false,
-          message: 'User and group validation failed',
-          error: error.message,
-        },
-        HttpStatus.INTERNAL_SERVER_ERROR,
-      );
-    }
-  }
-
-  /**
-   * Setup ulimit
-   * POST /vm-prereq/setup/ulimit/:serverId
-   * Body: { "username": "oracle" }
-   */
   @Post('setup/ulimit/:serverId')
   async setupUlimit(
     @Param('serverId') serverId: string,
@@ -197,10 +329,6 @@ export class VmPrereqController {
     }
   }
 
-  /**
-   * Setup sysctl
-   * POST /vm-prereq/setup/sysctl/:serverId
-   */
   @Post('setup/sysctl/:serverId')
   async setupSysctl(@Param('serverId') serverId: string) {
     try {
@@ -222,11 +350,6 @@ export class VmPrereqController {
     }
   }
 
-  /**
-   * Setup all prerequisites
-   * POST /vm-prereq/setup/all/:serverId
-   * Body: { "username": "oracle", "group": "dba" }
-   */
   @Post('setup/all/:serverId')
   async setupAll(
     @Param('serverId') serverId: string,
@@ -251,11 +374,6 @@ export class VmPrereqController {
     }
   }
 
-  /**
-   * Validate and auto-fix if needed
-   * POST /vm-prereq/validate-and-fix/:serverId
-   * Body: { "username": "oracle", "group": "dba", "autoFix": true }
-   */
   @Post('validate-and-fix/:serverId')
   async validateAndFix(
     @Param('serverId') serverId: string,
@@ -292,15 +410,14 @@ export class VmPrereqController {
                 body.username,
               );
             } else if (check.key === 'sysctl') {
-              // setupResults.sysctl =
-              //   await this.vmPrereqService.setupSysctl(+serverId);
+              setupResults.sysctl =
+                await this.vmPrereqService.setupSysctl(+serverId);
             }
           } catch (error) {
             setupResults[check.key] = { error: error.message };
           }
         }
 
-        // Re-validate after fixes
         const revalidation = await this.vmPrereqService.validateAll(
           +serverId,
           body,
@@ -333,11 +450,6 @@ export class VmPrereqController {
     }
   }
 
-  /**
-   * Get validation summary for multiple servers
-   * POST /vm-prereq/validate/batch
-   * Body: { "serverIds": [1, 2, 3], "username": "oracle", "group": "dba" }
-   */
   @Post('validate/batch')
   async validateBatch(
     @Body()
@@ -371,7 +483,14 @@ export class VmPrereqController {
 
       const successful = results
         .filter((r) => r.status === 'fulfilled')
-        .map((r: any) => r.value);
+        .map((r: any) => ({
+          success: r.value.overallStatus === 'pass',
+          serverId: r.value.serverId,
+          serverName: r.value.serverName,
+          timestamp: r.value.timestamp,
+          overallStatus: r.value.overallStatus,
+          validations: r.value.validations,
+        }));
 
       const failed = results
         .filter((r) => r.status === 'rejected')
@@ -400,10 +519,6 @@ export class VmPrereqController {
     }
   }
 
-  /**
-   * Get health summary
-   * GET /vm-prereq/health/:serverId
-   */
   @Get('health/:serverId')
   async getHealthSummary(@Param('serverId') serverId: string) {
     try {
