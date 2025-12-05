@@ -9,6 +9,8 @@ import { Card } from "@/components/ui/card"
 import { sshService } from "@/services/ssh-services"
 import toast from 'react-hot-toast';
 import axios, { AxiosError } from "axios"
+import ExecutionLog from "@/components/execution-log"
+import useLogStore from "@/store/log-store"
 
 export type Server = {
   id: any
@@ -40,7 +42,7 @@ export default function Home() {
   const [servers, setServers] = useState<Server[]>([])
   const [selectedServer, setSelectedServer] = useState<Server | null>(null)
   const [showAddServer, setShowAddServer] = useState(false)
-  const [logs, setLogs] = useState<LogEntry[]>([])
+  const { responseLog  }  = useLogStore();
   const [checkStatuses, setCheckStatuses] = useState<Record<string, "checking" | "configured" | "not-configured">>({
     userGroup: "not-configured",
     ulimit: "not-configured",
@@ -78,20 +80,15 @@ const handleAddServer = async (server: Server) => {
 
     // formData.append('file', sshKeyFile);
 
-
     const postData = await sshService.createServer(formData)
-
     const createdServer = postData;
-
-
     setServers([...servers, createdServer]);
     setSelectedServer(createdServer);
     setShowAddServer(false);
-    addLog("info", `Server "${createdServer.name}" added successfully`);
 
     return createdServer;
-  } catch (error) {
-    addLog("error", `Failed to add server: ${error.message}`);
+  } catch (error ) {
+     const err = error as AxiosError;
     throw error;
   }
 };
@@ -107,15 +104,7 @@ const handleAddServer = async (server: Server) => {
     }
   }
 
-  const addLog = (type: LogEntry["type"], message: string) => {
-    const newLog: LogEntry = {
-      id: Date.now().toString(),
-      timestamp: new Date().toLocaleTimeString(),
-      message,
-      type,
-    }
-    setLogs((prev) => [newLog, ...prev])
-  }
+  
 
   return (
     <main className="min-h-screen bg-background text-foreground">
@@ -177,7 +166,7 @@ const handleAddServer = async (server: Server) => {
 
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                   {/* Checklist */}
-                  <div className="lg:col-span-3">
+                  <div className="lg:col-span-2">
                  <ConfigurationChecklist
                  serverId={selectedServer.id}
      serverName={selectedServer.name}
@@ -185,9 +174,9 @@ const handleAddServer = async (server: Server) => {
                   </div>
 
                   {/* Execution Log */}
-                  {/* <div className="lg:col-span-1">
-                    <ExecutionLog logs={logs} />
-                  </div> */}
+                  <div className="lg:col-span-1">
+                    <ExecutionLog logs={responseLog} />
+                  </div>
                 </div>
               </div>
             ) : (

@@ -270,8 +270,7 @@ export default function ConfigurationChecklist({ serverId, serverName }: Configu
         setUserConfig(data)
         toast.success("User & Group setup completed successfully")
         setUserDialogOpen(false)
-        await validateSingle("user-group")
-      } catch (error: any) {
+            } catch (error: any) {
         toast.error("Setup Failed: " + error.message)
       } finally {
         setIsSettingUp((prev) => ({ ...prev, "user-group": false }))
