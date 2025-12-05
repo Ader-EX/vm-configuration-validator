@@ -10,25 +10,16 @@ import {
   UseInterceptors,
 } from '@nestjs/common';
 import { CreateSshListDto } from 'src/dto/create-sshlist-dto';
-import { SshService } from 'src/service/ssh.service';
 import { SshListService } from 'src/service/ssh-list.service';
 import { FileInterceptor } from '@nestjs/platform-express';
 
 @Controller('ssh')
 export class SshController {
-  constructor(
-    private readonly sshService: SshService,
-    private readonly sshListService: SshListService,
-  ) {}
+  constructor(private readonly sshListService: SshListService) {}
 
   @Get('uptime/:id')
   async getUptime(@Param() id: any) {
-    return await this.sshService.runSSHCommand(id);
-  }
-
-  @Get('shell')
-  async getShellPlayground() {
-    return await this.sshService.playgroundSSHCommand();
+    return await this.sshListService.runSSHCommand(id);
   }
 
   @Post()
@@ -37,10 +28,7 @@ export class SshController {
       dest: './uploads/sshkeys',
     }),
   )
-  create(
-    @Body() dto: CreateSshListDto,
-    @UploadedFile() file: Express.Multer.File,
-  ) {
+  create(@Body() dto: CreateSshListDto, @UploadedFile() file: any) {
     return this.sshListService.create(dto, file);
   }
 

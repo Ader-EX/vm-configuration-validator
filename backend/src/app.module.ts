@@ -1,8 +1,5 @@
 import { Module } from '@nestjs/common';
 import { AppController } from './app.controller';
-import { AppService } from './app.service';
-import { CatsController } from './cats.controller';
-import { SshService } from './service/ssh.service';
 import { SshController } from './ssh/ssh.controller';
 import { ConfigModule } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
@@ -28,12 +25,7 @@ import { VmPrereqController } from './controller/prereq-controller';
     }),
     TypeOrmModule.forFeature([SshList]),
   ],
-  controllers: [
-    AppController,
-    CatsController,
-    SshController,
-    VmPrereqController,
-  ],
-  providers: [AppService, SshService, SshListService, VmPrereqService],
+  controllers: [AppController, SshController, VmPrereqController],
+  providers: [SshListService, VmPrereqService],
 })
 export class AppModule {}
